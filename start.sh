@@ -56,6 +56,22 @@ fi
 fi
 done < "$input"
 
+# Assign users to roles
+users="user2role.csv"
+while IFS=',' read -r f1 f2 f3
+do
+userId=$(curl -H "Authorization: Bearer $TOKEN" -sL -X GET  $KEYCLOAK_ENDPOINT/admin/realms/$KEYCLOAK_REALM/users?username=$f1 | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+status=$(curl -d "[{\"id\": \"$f3\", \"name\": \"$f2\"}]" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -sL -w "%{http_code}\\n" -X POST $KEYCLOAK_ENDPOINT/admin/realms/$KEYCLOAK_REALM/users/$userId/role-mappings/realm)
+# echo "userId=$userId f1=$f1 f2=$f2 f3=$f3 status=$status"
+if [ "$status" == "204" ]; then
+    echo "Role $f2 assigned to user $f1 in $KEYCLOAK_REALM realm";
+else
+    echo "An error occurred during assignment role to user $status";
+fi
+
+
+done < "$users"
+
 # Create clientA
 var=$(curl -d @clientA.json -H "Expect:" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -sL -w "%{http_code}\\n" -X POST $KEYCLOAK_ENDPOINT/admin/realms/$KEYCLOAK_REALM/clients)
 if [ "$var" == "201" ]; then
