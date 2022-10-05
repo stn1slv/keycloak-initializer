@@ -7,59 +7,74 @@ fi
 if [ -z "$KEYCLOAK_PASSWORD" ]; then
     export KEYCLOAK_PASSWORD=admin
 fi
-if [ -z "$KEYCLOAK_PORT" ]; then
-    export KEYCLOAK_PORT=8080
+if [ -z "$KEYCLOAK_ENDPOINT" ]; then
+    export KEYCLOAK_ENDPOINT=http://host.docker.internal:8080/auth
 fi
-if [ -z "$KEYCLOAK_HOST" ]; then
-    export KEYCLOAK_HOST=host.docker.internal
+if [ -z "$KEYCLOAK_REALM" ]; then
+    export KEYCLOAK_REALM=master
 fi
 
+
+echo "KeyCloan endpoint is $KEYCLOAK_ENDPOINT"
+
 # Wait for KeyCloak
-until [ "$(curl -sL -w "%{http_code}\\n" http://$KEYCLOAK_HOST:$KEYCLOAK_PORT/auth/realms/master/.well-known/openid-configuration -o /dev/null)" == "200" ]
+until [ "$(curl -sL -w "%{http_code}\\n" $KEYCLOAK_ENDPOINT/realms/master/.well-known/openid-configuration -o /dev/null)" == "200" ]
 do
-    echo "$(date) - still trying to connect to KeyCloak at http://$KEYCLOAK_HOST:$KEYCLOAK_PORT"
+    echo "$(date) - still trying to connect to KeyCloak at $KEYCLOAK_ENDPOINT"
     sleep 5
 done
 
 # Get JWT token
 echo "Getting JWT for $KEYCLOAK_USER user";
-export TOKEN=$(curl -ss -d "username=$KEYCLOAK_USER&password=$KEYCLOAK_PASSWORD&grant_type=password&client_id=admin-cli&client_secret=7f2fc8e5-f01c-471b-b981-ef7534041790" -H "Content-Type: application/x-www-form-urlencoded" -X POST http://$KEYCLOAK_HOST:$KEYCLOAK_PORT/auth/realms/master/protocol/openid-connect/token | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+export TOKEN=$(curl -ss -d "username=$KEYCLOAK_USER&password=$KEYCLOAK_PASSWORD&grant_type=password&client_id=admin-cli&client_secret=7f2fc8e5-f01c-471b-b981-ef7534041790" -H "Content-Type: application/x-www-form-urlencoded" -X POST $KEYCLOAK_ENDPOINT/realms/master/protocol/openid-connect/token | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+
+# Create realm
+var=$(curl -d @realm.json -H "Expect:" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -sL -w "%{http_code}\\n" -X POST $KEYCLOAK_ENDPOINT/admin/realms)
+if [ "$var" == "201" ]; then
+    echo "Realm created";
+else
+    if [ "${var: -3}" == "409" ]; then
+        echo "Realm exists";
+    else
+        echo "An error occurred during realm creation";
+    fi
+fi
 
 # Create users
 input="users.csv"
 while IFS=',' read -r f1 f2 f3 f4 f5
 do
- var=$(curl -d "{ \"username\": \"$f1\", \"enabled\": true, \"emailVerified\": false, \"firstName\": \"$f4\", \"lastName\": \"$f3\", \"credentials\": [{ \"type\": \"password\", \"value\": \"$f2\", \"temporary\": false }] }" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -sL -w "%{http_code}\\n" -X POST  http://$KEYCLOAK_HOST:$KEYCLOAK_PORT/auth/admin/realms/master/users)
- if [ "$var" == "201" ]; then
-    echo "User $f1 created";
- else
-  if [ "${var: -3}" == "409" ]; then
-    echo "User $f1 exists";
-  else
+var=$(curl -d "{ \"username\": \"$f1\", \"enabled\": true, \"emailVerified\": false, \"firstName\": \"$f4\", \"lastName\": \"$f3\", \"credentials\": [{ \"type\": \"password\", \"value\": \"$f2\", \"temporary\": false }] }" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -sL -w "%{http_code}\\n" -X POST  $KEYCLOAK_ENDPOINT/admin/realms/$KEYCLOAK_REALM/users)
+if [ "$var" == "201" ]; then
+    echo "User $f1 created in $KEYCLOAK_REALM realm";
+else
+if [ "${var: -3}" == "409" ]; then
+    echo "User $f1 exists in $KEYCLOAK_REALM realm";
+else
     echo "An error occurred during user creation";
-  fi
- fi
+fi
+fi
 done < "$input"
 
 # Create clientA
-var=$(curl -d @clientA.json -H "Expect:" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -sL -w "%{http_code}\\n" -X POST http://$KEYCLOAK_HOST:$KEYCLOAK_PORT/auth/admin/realms/master/clients)
+var=$(curl -d @clientA.json -H "Expect:" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -sL -w "%{http_code}\\n" -X POST $KEYCLOAK_ENDPOINT/admin/realms/$KEYCLOAK_REALM/clients)
 if [ "$var" == "201" ]; then
-    echo "ClientA created";
+    echo "ClientA created in $KEYCLOAK_REALM realm";
 else
     if [ "${var: -3}" == "409" ]; then
-        echo "ClientA exists";
+        echo "ClientA exists in $KEYCLOAK_REALM realm";
     else
         echo "An error occurred during client creation";
     fi
 fi
 
 # Create clientB
-var=$(curl -d @clientB.json -H "Expect:" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -sL -w "%{http_code}\\n" -X POST http://$KEYCLOAK_HOST:$KEYCLOAK_PORT/auth/admin/realms/master/clients)
+var=$(curl -d @clientB.json -H "Expect:" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -sL -w "%{http_code}\\n" -X POST $KEYCLOAK_ENDPOINT/admin/realms/$KEYCLOAK_REALM/clients)
 if [ "$var" == "201" ]; then
-    echo "ClientB created";
+    echo "ClientB created in $KEYCLOAK_REALM realm";
 else
     if [ "${var: -3}" == "409" ]; then
-        echo "ClientB exists";
+        echo "ClientB exists in $KEYCLOAK_REALM realm";
     else
         echo "An error occurred during client creation";
     fi
