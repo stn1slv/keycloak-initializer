@@ -13,7 +13,12 @@ fi
 if [ -z "$KEYCLOAK_REALM" ]; then
     export KEYCLOAK_REALM=master
 fi
-
+if [ -z "$KEYCLOAK_CLIENT_ID" ]; then
+    export KEYCLOAK_CLIENT_ID=admin-cli
+fi
+if [ -z "$KEYCLOAK_CLIENT_SECRET" ]; then
+    export KEYCLOAK_CLIENT_SECRET=7f2fc8e5-f01c-471b-b981-ef7534041790
+fi
 
 echo "KeyCloan endpoint is $KEYCLOAK_ENDPOINT"
 
@@ -26,7 +31,7 @@ done
 
 # Get JWT token
 echo "Getting JWT for $KEYCLOAK_USER user";
-export TOKEN=$(curl -ss -d "username=$KEYCLOAK_USER&password=$KEYCLOAK_PASSWORD&grant_type=password&client_id=admin-cli&client_secret=7f2fc8e5-f01c-471b-b981-ef7534041790" -H "Content-Type: application/x-www-form-urlencoded" -X POST $KEYCLOAK_ENDPOINT/realms/master/protocol/openid-connect/token | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+export TOKEN=$(curl -ss -d "username=$KEYCLOAK_USER&password=$KEYCLOAK_PASSWORD&grant_type=password&client_id=$KEYCLOAK_CLIENT_ID&client_secret=$KEYCLOAK_CLIENT_SECRET" -H "Content-Type: application/x-www-form-urlencoded" -X POST $KEYCLOAK_ENDPOINT/realms/master/protocol/openid-connect/token | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
 
 # Create realm
 var=$(curl -d @realm.json -H "Expect:" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -sL -w "%{http_code}\\n" -X POST $KEYCLOAK_ENDPOINT/admin/realms)
